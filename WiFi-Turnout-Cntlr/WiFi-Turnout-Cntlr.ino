@@ -1,7 +1,7 @@
 /*****
   MQTT IOT Turnout Controller
   Copyright 2020 David J Bristow
-  Version 1.0.0 - May 11, 2020
+  Version 1.0.1 - May 12, 2020
 
   - connects to an MQTT broker via wifi
   - subscribes to the topic acts/to/trnCtlrxx where xx is the this controller
@@ -42,8 +42,8 @@ bool suscribeFlag = false;
 int turnout = 0;
 byte turnoutDir = 0x63;
 byte cmd = 0x73;
-const char* ssid = "CenturyLink3021";  // <===== Configurable
-const char* password = "rda34348b7e4ed";  // <===== Configurable
+const char* ssid = "CenturyLink*****";  // <===== Configurable
+const char* password = "***********";  // <===== Configurable
 WiFiClient espWiFiClient;
 int mqttPort = 1883;
 IPAddress mqtt_server(192, 168, 0, 7);  // <===== Configurable
@@ -216,7 +216,6 @@ void setup() {
 // chceks to see that the closed or thrown position has been
 // achieved. Then a message is published with the status of
 // the turnout under command
-// 
 void loop() {
   subscribeMqtt();
   if (suscribeFlag) {

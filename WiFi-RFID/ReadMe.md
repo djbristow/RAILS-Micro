@@ -4,8 +4,8 @@
 # Version
 * 1.0.0 - 5/11/2020
 
-This software impmlemnts a IoT turnout controller for Tortoise motors.
-For further information see http://kjcrr.org/
+This software impmlemnts a IoT RFID reader.
+For further information see https://kjcrr.org/rails/hardware-development/mqtt-wifi-rfid-reader
 
 The following actions are accomplished:
   - connects to an MQTT broker via wifi
