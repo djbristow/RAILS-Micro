@@ -1,12 +1,15 @@
 /*****
   MQTT IOT RFID Reader
+  Copyright 2020 David J Bristow
+  Version 1.0.0 - May 15, 2020
   - connects to an MQTT broker via wifi
   - reads values from a single ID-12LA or 7491E RFID reader
   - formats the results as a JSON string
   - gets Epoch time from an NTP server
   - and publishes the JSON String to the topic "sensors/rfid"
 
-   Copyright 2020 David J Bristow
+  Note: items marked as "configurable" need to be set for the specifics of
+  the railroad under control
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -18,6 +21,7 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 *****/
+
 #define useID12LA_Reader
 //#define use7491E_Reader
 #include <ESP8266WiFi.h>
@@ -32,7 +36,7 @@ WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "192.168.0.7", 3600, 60000);  // <===== Configurable
 SoftwareSerial RFID(13, -1); // RX and TX
 const char* ssid = "CenturyLink";  // <===== Configurable
-const char* password = "xxxxxxxxxxxx";  // <===== Configurable
+const char* password = "**********";  // <===== Configurable
 IPAddress mqtt_server(192, 168, 0, 7);  // <===== Configurable
 int mqttPort = 1883;
 char mqttMsg[800]; //buffer used to publish messages via mqtt
@@ -154,9 +158,12 @@ String buildJson(String id, String sensor, String et) {
 
 void setup() {
   Serial.begin(115200);
+  Serial.println("WiFi RFID Reader");
+  Serial.println("Start Setup");
   RFID.begin(9600);    // start serial to RFID reader
   setup_wifi();
   timeClient.begin();
+  Serial.println("Finished Setup");
 }
 
 void loop() {
