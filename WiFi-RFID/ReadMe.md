@@ -2,13 +2,14 @@
 &copy; David J Bristow, 2020
 
 # Version
-* 1.0.1 - 5/151/2020
+* 1.1.0 - 5/19/2020
 
 This software impmlemnts a IoT RFID reader.
 For further information see https://kjcrr.org/rails/hardware-development/mqtt-wifi-rfid-reader
 
 The following actions are accomplished:
   - connects to an MQTT broker via wifi
+  - publishes info about this reader to the topic "micros"
   - reads values from a single ID-12LA or 7491E RFID reader
   - formats the results as a JSON string
   - gets Epoch time from an NTP server

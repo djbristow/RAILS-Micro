@@ -1,8 +1,9 @@
 /*****
   MQTT IOT RFID Reader
   Copyright 2020 David J Bristow
-  Version 1.0.0 - May 15, 2020
+  Version 1.1.0 - May 19, 2020
   - connects to an MQTT broker via wifi
+  - publishes info about this reader to the topic micros
   - reads values from a single ID-12LA or 7491E RFID reader
   - formats the results as a JSON string
   - gets Epoch time from an NTP server
@@ -22,34 +23,42 @@
    limitations under the License.
 *****/
 
+/*****************  CONSTANTS ********************************************/
 #define useID12LA_Reader
 //#define use7491E_Reader
+#define D7 (13)
+#define noTxPin -1
+#define BAUD_RATE 9600
+
+/******************  LIBRARY SECTION *************************************/
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
 #include <WiFiUdp.h>
 #include <NTPClient.h>
 #include <SoftwareSerial.h>
 
-// Variables
-WiFiClient espWiFiClient; // change name when multiple readers are in the network
+/***********************  WIFI, MQTT AND SERIAL SETUP *****************************/
+WiFiClient espWiFi01; // <===== Configurable
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "192.168.0.7", 3600, 60000);  // <===== Configurable
-SoftwareSerial RFID(13, -1); // RX and TX
+SoftwareSerial RFID(D7, noTxPin); // RX with no TX
 const char* ssid = "CenturyLink";  // <===== Configurable
-const char* password = "**********";  // <===== Configurable
+const char* password = "************";  // <===== Configurable
 IPAddress mqtt_server(192, 168, 0, 7);  // <===== Configurable
 int mqttPort = 1883;
+char pubTopic[] = "sensors/rfid";  // <===== Configurable
+String clientId = "rfidRdr01";  // <===== Configurable
+PubSubClient client(mqtt_server, mqttPort, espWiFi01);
+
+/*****************  GLOBAL VARIABLES  ************************************/
 char mqttMsg[800]; //buffer used to publish messages via mqtt
 unsigned long epochTime = 0;
-char pubtopic[] = "sensors/rfid";  // <===== Configurable
-String clientId = "rfidRdr00";  // <===== Configurable
 char buf[100];
 int strLength = 0;
 String rfTagId = "";
 String rfidJsonPayload = "";
-PubSubClient client(mqtt_server, mqttPort, espWiFiClient);
 
-// This function connects the ESP8266 to the LAN
+/*****************  SYSTEM FUNCTIONS  *************************************/
 void setup_wifi() {
   delay(10);
   WiFi.mode(WIFI_STA);
@@ -62,7 +71,6 @@ void setup_wifi() {
   Serial.println(WiFi.localIP());
 }
 
-// This function reconnects the ESP8266 to the MQTT broker
 void reconnect() {
   while (!client.connected()) {
     //Serial.print("Attempting MQTT connection...");
@@ -78,12 +86,13 @@ void reconnect() {
   }
 }
 
-#ifdef useID12LA_Reader // This function reads the RFID ID-12LA transmission
+/*****************  RFID READER FUNCTIONS  *********************************/
+/*****************  RFID ID-12LA READER FUNCTION  **************************/
+#ifdef useID12LA_Reader
 String getTagId() {
   String tagId = "";
   char tagChr;
   int i = 0;
-  // Serial.println("Trying to read tag");
   while (!RFID.available()) {
     delay(200);
   }
@@ -98,7 +107,8 @@ String getTagId() {
 }
 #endif
 
-#ifdef use7491E_Reader // these functions gets the RFID Tag froma 7491E
+/*****************  RFID 7491E READER FUNCTION  *****************************/
+#ifdef use7491E_Reader
 char valToHex(uint8_t val) {
   if ((val & 0x0f) < 10)
     return ('0' + val);
@@ -137,35 +147,61 @@ String getTagId() {
       }
       tryingToReadTag = false;
     } else {
-      delay(100);
+      //Serial.print("*");
+      delay(500);
     }
   }
   return tagId;
 }
 #endif
 
-// This function builds the Json message
+/***************** JSON MESSAGE BUILDER FUNCTION *********************/
 String buildJson(String id, String sensor, String et) {
   String mqttMsg = "{\"epochTime\":\"";
-  mqttMsg = mqttMsg +  et;
-  mqttMsg = mqttMsg +  "\",\"sensor\":\"";
-  mqttMsg = mqttMsg +  sensor;
-  mqttMsg = mqttMsg +  "\",\"rfid\":\"";
-  mqttMsg = mqttMsg +  id;
-  mqttMsg = mqttMsg +  "\"}";
+  mqttMsg = mqttMsg + et;
+  mqttMsg = mqttMsg + "\",\"sensor\":\"";
+  mqttMsg = mqttMsg + sensor;
+  mqttMsg = mqttMsg + "\",\"rfid\":\"";
+  mqttMsg = mqttMsg + id;
+  mqttMsg = mqttMsg + "\"}";
   return mqttMsg;
 }
 
-void setup() {
-  Serial.begin(115200);
-  Serial.println("WiFi RFID Reader");
-  Serial.println("Start Setup");
-  RFID.begin(9600);    // start serial to RFID reader
-  setup_wifi();
-  timeClient.begin();
-  Serial.println("Finished Setup");
+/*****************  MQTT PUBLISH FUNCTION  ****************************/
+void publishMqtt(String payload, char topic[]) {
+  char buf[100];
+  int strLength = payload.length() + 1;
+  payload.toCharArray(buf, strLength);
+  if (!client.connected()) {
+    reconnect();
+  }
+  if (client.connected()) {
+    client.publish(topic, buf);
+  }
 }
 
+/*****************  SETUP FUNCTION  ***********************************/
+void setup() {
+  Serial.begin(9600);
+  Serial.println("WiFi RFID Reader");
+  Serial.println("Start Setup");
+  RFID.begin(BAUD_RATE, SWSERIAL_8N1);
+  setup_wifi();
+  timeClient.begin();
+  timeClient.update();
+  epochTime = timeClient.getEpochTime();
+  String mqttMsg = "{\"epochTime\":\"";
+  mqttMsg = mqttMsg + timeClient.getEpochTime();
+  mqttMsg = mqttMsg + "\",\"sensor\":\"";
+  mqttMsg = mqttMsg + clientId;
+  mqttMsg = mqttMsg + "\",\"ip\":\"";
+  mqttMsg = mqttMsg + WiFi.localIP().toString();
+  mqttMsg = mqttMsg + "\"}";
+  publishMqtt(mqttMsg, "micros");
+  Serial.println(" Finished Setup");
+}
+
+/*****************  MAIN LOOP  ****************************************/
 void loop() {
   rfTagId = getTagId();
   if (rfTagId.length() == 10) {
@@ -173,14 +209,7 @@ void loop() {
     epochTime = timeClient.getEpochTime();
     rfidJsonPayload = buildJson(rfTagId, "rfidRdr01", String(epochTime));
     strLength = rfidJsonPayload.length() + 1;
-    //Serial.println(rfidJsonPayload);
-    rfidJsonPayload.toCharArray(buf, strLength);
-    if (!client.connected()) { // connect to mqtt broker
-      reconnect();
-    }
-    if (client.connected()) {
-      client.publish(pubtopic, buf);
-    }
+    publishMqtt(rfidJsonPayload, pubTopic);
   }
   delay(25);
 }
