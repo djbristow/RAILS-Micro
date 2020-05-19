@@ -1,7 +1,7 @@
 /*****
   MQTT IOT Turnout Controller
   Copyright 2020 David J Bristow
-  Version 1.0.1 - May 12, 2020
+  Version 1.0.2 - May 17, 2020
 
   - connects to an MQTT broker via wifi
   - subscribes to the topic acts/to/trnCtlrxx where xx is the this controller
@@ -28,6 +28,7 @@
    limitations under the License.
 *****/
 
+/******************  LIBRARY SECTION *************************************/
 #include <Wire.h>
 #include "Adafruit_MCP23017.h"
 #include <ESP8266WiFi.h>
@@ -35,29 +36,63 @@
 #include <PubSubClient.h>
 #include <NTPClient.h>
 
+/***********************  WIFI AND MQTT SETUP *****************************/
+const char* ssid = "CenturyLink*****";  // <===== Configurable
+const char* password = "***********";  // <===== Configurable
+WiFiClient espWiFi02; // <===== Configurable
+int mqttPort = 1883;
+IPAddress mqtt_server(192, 168, 0, 7);  // <===== Configurable
+String clientId = "trnCtlr00";  // <===== Configurable
+PubSubClient client(mqtt_server, mqttPort, espWiFi02);
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP, "192.168.0.7", 3600, 60000);  // <===== Configurable
+char pubTopic[] = "sensors/toc";  // <===== Configurable
+char subTopic[] = "acts/to/trnCtlr00";  // <===== Configurable
+
+/***********************  MCP23017 DECLARATION *****************************/
 Adafruit_MCP23017 MCP;
 void ICACHE_RAM_ATTR handleInterrupt();
+
+/*****************  GLOBAL VARIABLES  ************************************/
 uint8_t gpioB = 0xFF;
 bool suscribeFlag = false;
 int turnout = 0;
 byte turnoutDir = 0x63;
 byte cmd = 0x73;
-const char* ssid = "CenturyLink*****";  // <===== Configurable
-const char* password = "***********";  // <===== Configurable
-WiFiClient espWiFiClient;
-int mqttPort = 1883;
-IPAddress mqtt_server(192, 168, 0, 7);  // <===== Configurable
-String clientId = "trnCtlr00";  // <===== Configurable
-PubSubClient client(mqtt_server, mqttPort, espWiFiClient);
-WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "192.168.0.7", 3600, 60000);  // <===== Configurable
 unsigned long epochTime = 0;
-char pubTopic[] = "sensors/toc";  // <===== Configurable
-char subTopic[] = "acts/to/trnCtlr00";  // <===== Configurable
 
-// This function sets the A port pins as outputs controlling 4 Tortoise stall motors
-// and sets up teh B port pins as inputs with pull up internal resistors
-// After the pins are setup the direction of each turnout is determined and published
+
+/*****************  SYSTEM FUNCTIONS  *************************************/
+void setup_wifi() {
+  delay(10);
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.print("WiFi connected - ESP IP address: ");
+  Serial.println(WiFi.localIP());
+}
+
+void reconnect() {
+  while (!client.connected()) {
+    if (client.connect(clientId.c_str())) {
+      // do nothing
+    } else {
+      Serial.print("failed, rc=");
+      Serial.println(client.state());
+      delay(5000); // Wait 5 seconds before retrying
+    }
+  }
+}
+
+/*****************  MCP23017 INITIALIZATION FUNCTION  ***************** 
+This function sets the A port pins as outputs controlling 4 Tortoise
+stall motors and sets up the B port pins as inputs with pull up internal
+resistors. After the pins are setup the direction of each turnout is 
+determined and published.
+***********************************************************************/
 void setup_MCP23017() {
   timeClient.update();
   epochTime = timeClient.getEpochTime();
@@ -105,65 +140,10 @@ void setup_MCP23017() {
   }
 }
 
-// This function determines the direction of the Tortoise motor as
-// either thrown or closed from the vale of the B port and the pin that
-// caused the interrupt
-byte determine_dir(int turnout) {
-  byte turnoutDir = 0x63;  // default to closed
-  uint8_t mask = 0x03 << (turnout - 1) * 2;
-  uint8_t dir = (gpioB & mask) >> (turnout - 1) * 2;
-  if (dir == 1) {
-    turnoutDir = 0x74;
-  }
-  return turnoutDir;
-}
-
-// This function builds a Json string from turnout info
-String buildJson(String id, int turnout, unsigned long et, byte turnout_direction) {
-  String dir = "closed";
-  if (turnout_direction == 0x74) {
-    dir = "thrown";
-  }
-  String mqttMsg = "{\"et\":\"";
-  mqttMsg = mqttMsg +  String(et);
-  mqttMsg = mqttMsg +  "\",\"cntrlr\":\"";
-  mqttMsg = mqttMsg +  id;
-  mqttMsg = mqttMsg +  "\",\"to\":\"";
-  mqttMsg = mqttMsg +  turnout;
-  mqttMsg = mqttMsg +  "\",\"dir\":\"";
-  mqttMsg = mqttMsg +  dir;
-  mqttMsg = mqttMsg +  "\"}";
-  return mqttMsg;
-}
-
-// This function connects the ESP8266 to the LAN
-void setup_wifi() {
-  delay(10);
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.print("WiFi connected - ESP IP address: ");
-  Serial.println(WiFi.localIP());
-}
-
-// This function reconnects the ESP8266 to the MQTT broker
-void reconnect() {
-  while (!client.connected()) {
-    if (client.connect(clientId.c_str())) {
-      // do nothing
-    } else {
-      Serial.print("failed, rc=");
-      Serial.println(client.state());
-      delay(5000); // Wait 5 seconds before retrying
-    }
-  }
-}
-
-// This function extracts the data from a subscribed message
-// and writes to the turnout pins if command is either close or throw
+/************************** MQTT CALLBACK ****************************
+This function extracts the data from a subscribed message and writes
+to the turnout pins if command is either close or throw
+***********************************************************************/
 void callback(char* topic, byte* payload, unsigned int length) {
   suscribeFlag = true;
   turnout = payload[7] - 48;
@@ -177,7 +157,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     MCP.digitalWrite(((turnout - 1) * 2) + 1, LOW);
   }
 }
-
+/************************** MQTT PUB & SUB FUNCTIONS *******************/
 void publishMqtt(String payload) {
   char buf[100];
   int strLength = payload.length() + 1;
@@ -198,6 +178,40 @@ void subscribeMqtt() {
     client.subscribe(subTopic);
   }
 }
+
+/***************** TURNOUT DIRECTION FUNCTION *************************
+This function determines the direction of the Tortoise motor as either
+thrown or closed from the value of the B port and the TO commanded
+***********************************************************************/
+byte determine_dir(int turnout) {
+  byte turnoutDir = 0x63;  // default to closed
+  uint8_t mask = 0x03 << (turnout - 1) * 2;
+  uint8_t dir = (gpioB & mask) >> (turnout - 1) * 2;
+  if (dir == 1) {
+    turnoutDir = 0x74;
+  }
+  return turnoutDir;
+}
+
+/***************** JSON MESSAGE BUILDER FUNCTION *********************/
+String buildJson(String id, int turnout, unsigned long et, byte turnout_direction) {
+  String dir = "closed";
+  if (turnout_direction == 0x74) {
+    dir = "thrown";
+  }
+  String mqttMsg = "{\"et\":\"";
+  mqttMsg = mqttMsg +  String(et);
+  mqttMsg = mqttMsg +  "\",\"cntrlr\":\"";
+  mqttMsg = mqttMsg +  id;
+  mqttMsg = mqttMsg +  "\",\"to\":\"";
+  mqttMsg = mqttMsg +  turnout;
+  mqttMsg = mqttMsg +  "\",\"dir\":\"";
+  mqttMsg = mqttMsg +  dir;
+  mqttMsg = mqttMsg +  "\"}";
+  return mqttMsg;
+}
+
+/*****************  SETUP FUNCTION  ***********************************/
 void setup() {
   Serial.begin(115200);
   Serial.println("WiFi Turnout Cntlr");
@@ -209,13 +223,13 @@ void setup() {
   client.setCallback(callback);
     Serial.println("Finished Setup");
 }
-
-// The main loop function runs over and over again forever
-// first subscribing to a message
-// if a message was rxd and it wasn't a status cmd a loop is
-// chceks to see that the closed or thrown position has been
-// achieved. Then a message is published with the status of
-// the turnout under command
+/*****************  MAIN LOOP  ****************************************
+The main loop function runs over and over again forever first
+subscribing to a message if a message was rxd and it wasn't a status 
+cmd a loop is chECks to see that the closed or thrown position has been
+achieved. Then a message is published with the status of the turnout 
+under command.
+***********************************************************************/
 void loop() {
   subscribeMqtt();
   if (suscribeFlag) {
