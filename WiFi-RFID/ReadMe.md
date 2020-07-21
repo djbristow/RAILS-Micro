@@ -10,10 +10,12 @@ For further information see https://kjcrr.org/rails/hardware-development/mqtt-wi
 The following actions are accomplished:
   - connects to an MQTT broker via wifi
   - publishes info about this reader to the topic "micros"
+  - published format: {"et":"1590556915","micro":"rfidRdr01","ip":"192.168.0.19"}
   - reads values from a single ID-12LA or 7491E RFID reader
   - formats the results as a JSON string
   - gets Epoch time from an NTP server
   - and publishes the JSON String to the topic "sensors/rfid"
+  - published format: {"et":"1590557122","sensor":"rfidRdr01","rfid":"AAADCDDAC7"}
   
 **NOTE**: Items marked as "configurable" need to be set for the specifics of the model railroad under control
 

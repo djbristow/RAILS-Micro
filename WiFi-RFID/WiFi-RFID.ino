@@ -1,13 +1,15 @@
 /*****
   MQTT IOT RFID Reader
   Copyright 2020 David J Bristow
-  Version 1.1.0 - May 19, 2020
+  Version 1.1.1 - 7/20/20
   - connects to an MQTT broker via wifi
   - publishes info about this reader to the topic micros
+    {"epochTime":"1590462747","sensor":"rfidRdr01","ip":"192.168.0.19"}
   - reads values from a single ID-12LA or 7491E RFID reader
   - formats the results as a JSON string
   - gets Epoch time from an NTP server
   - and publishes the JSON String to the topic "sensors/rfid"
+    {"epochTime":"1590463450","sensor":"rfidRdr01","rfid":"1C0044CF23"}
 
   Note: items marked as "configurable" need to be set for the specifics of
   the railroad under control
@@ -42,8 +44,8 @@ WiFiClient espWiFi01; // <===== Configurable
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "192.168.0.7", 3600, 60000);  // <===== Configurable
 SoftwareSerial RFID(D7, noTxPin); // RX with no TX
-const char* ssid = "CenturyLink";  // <===== Configurable
-const char* password = "************";  // <===== Configurable
+const char* ssid = "";  // <===== Configurable
+const char* password = "";  // <===== Configurable
 IPAddress mqtt_server(192, 168, 0, 7);  // <===== Configurable
 int mqttPort = 1883;
 char pubTopic[] = "sensors/rfid";  // <===== Configurable
