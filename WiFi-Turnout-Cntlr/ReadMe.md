@@ -2,13 +2,15 @@
 &copy; David J Bristow, 2020
 
 # Version
-* 1.0.2 - 5/17/2020
+* 1.1.0 - 5/28/2020
 
 This software impmlemnts a IoT turnout controller for Tortoise motors.
 For further information see http://kjcrr.org/
 
 The following actions are accomplished:
   - connects to an MQTT broker via wifi
+  - publishes info about this reader to the topic "micros"
+  - published format: {"et":"1590555915","micro":"trnCtlr00","ip":"192.168.0.19"}
   - subscribes to the topic acts/to/trnCtlrxx where xx is the this controller
   - subscribed format: {"to":"1|2|3|4","command":"throw|close|status"}
   - either sets the turnout using an L293 to closed or thrown based on the command rxd
